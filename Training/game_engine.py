@@ -34,8 +34,8 @@ class RepCounter:
         self.form_error = None
         self.exercise_name = exercise_name
         self.weight = weight
-        self.base_points = 10
-        self.penalty_points = -5
+        self.base_points = 100
+        self.penalty_points = -25
 
     def update(self, angle):
         rep_status = None; points = 0
@@ -68,8 +68,8 @@ class RepCounterInverted:
         self.form_error = None
         self.exercise_name = exercise_name
         self.weight = weight
-        self.base_points = 10
-        self.penalty_points = -5
+        self.base_points = 100
+        self.penalty_points = -25
 
     def update(self, angle):
         rep_status = None; points = 0
@@ -108,7 +108,7 @@ def check_form(exercise, landmarks, rep_counter):
             hip = [landmarks[mp.solutions.pose.PoseLandmark.LEFT_HIP.value].x, landmarks[mp.solutions.pose.PoseLandmark.LEFT_HIP.value].y, landmarks[mp.solutions.pose.PoseLandmark.LEFT_HIP.value].z]
             ankle = [landmarks[mp.solutions.pose.PoseLandmark.LEFT_ANKLE.value].x, landmarks[mp.solutions.pose.PoseLandmark.LEFT_ANKLE.value].y, landmarks[mp.solutions.pose.PoseLandmark.LEFT_ANKLE.value].z]
             body_angle = calculate_angle(shoulder, hip, ankle)
-            if body_angle < 130: return "Hips sagging"
+            if body_angle < 155: return "Hips sagging"
             if body_angle > 175: return "Hips too high"
     except Exception as e: pass
     return None
@@ -165,10 +165,12 @@ class GameEngine:
         self.score = 0
         self.form_feedback = ""
         self.feedback_display_time = 0
+        
+        # --- UPDATED: Removed barbell biceps curl ---
         self.rep_counter_config = {
             'squat': {'class': RepCounter, 'params': {'down_threshold': 90, 'up_threshold': 160, 'exercise_name': 'squat'}, 'is_weighted': True},
             'push-up': {'class': RepCounter, 'params': {'down_threshold': 110, 'up_threshold': 160, 'exercise_name': 'push-up'}, 'is_weighted': False},
-            'barbell biceps curl': {'class': RepCounter, 'params': {'down_threshold': 60, 'up_threshold': 150, 'exercise_name': 'bicep curl'}, 'is_weighted': True},
+            # 'barbell biceps curl': {'class': RepCounter, 'params': {'down_threshold': 60, 'up_threshold': 150, 'exercise_name': 'bicep curl'}, 'is_weighted': True}, # <-- REMOVED
             'hammer curl': {'class': RepCounter, 'params': {'down_threshold': 100, 'up_threshold': 140, 'exercise_name': 'hammer curl'}, 'is_weighted': True},
             'lateral raise': {'class': RepCounterInverted, 'params': {'down_threshold': 30, 'up_threshold': 80, 'exercise_name': 'lateral raise'}, 'is_weighted': True},
         }
@@ -233,19 +235,16 @@ class GameEngine:
                 except ValueError: pass
         
         # --- Exercise-Specific Logic ---
+        # (Unchanged)
         display_text = f"{self.stable_prediction}"
         exercise_to_process = self.grace_period_active_for if self.grace_period_active_for is not None else self.stable_prediction
         reps_text = "N/A"; current_feedback = ""
         
         if exercise_to_process == 'plank':
-            # --- UPDATED: Plank Scoring Logic ---
-            plank_form_ok = True # Assume form is good
+            plank_form_ok = True
             if results.pose_landmarks:
                 feedback = check_form('plank', results.pose_landmarks.landmark, None)
-                if feedback: 
-                    current_feedback = feedback
-                    plank_form_ok = False # Form is bad
-            
+                if feedback: current_feedback = feedback; plank_form_ok = False
             if self.plank_grace_period_start is not None:
                 if self.plank_timer_start is None:
                     grace_time_elapsed = time.time() - self.plank_grace_period_start
@@ -259,32 +258,28 @@ class GameEngine:
                     current_time = time.time()
                     plank_time_elapsed = current_time - self.plank_timer_start
                     reps_text = f"{plank_time_elapsed:.1f}s"
-                    
-                    # Check if a second has passed to award points
                     if current_time - (self.last_plank_point_time or self.plank_timer_start) >= 1.0:
-                        if plank_form_ok:
-                            self.score += 4 # Add 4 points for good form
-                        else:
-                            self.score += 1 # Add 1 points for bad form
+                        self.score += 10 if plank_form_ok else 5
                         self.last_plank_point_time = current_time
-            # --- End of Updated Plank Logic ---
 
         elif exercise_to_process in self.rep_counter_config and self.current_rep_counter:
-            # (Rep counter logic - unchanged)
             exercise_name_for_logic = exercise_to_process
             reps_text = str(self.current_rep_counter.count)
             if results.pose_landmarks:
                 lm = results.pose_landmarks.landmark; angle = 0; points_this_update = 0
                 try:
+                    # --- UPDATED: Removed 'barbell biceps curl' from logic ---
                     if exercise_name_for_logic == 'squat':
                         shoulder, hip, knee = (self.mp_pose.PoseLandmark.LEFT_SHOULDER, self.mp_pose.PoseLandmark.LEFT_HIP, self.mp_pose.PoseLandmark.LEFT_KNEE); left_vis = lm[hip.value].visibility; right_vis = lm[self.mp_pose.PoseLandmark.RIGHT_HIP.value].visibility; chosen_hip = hip
                         if right_vis > left_vis and right_vis > self.VISIBILITY_THRESHOLD: shoulder, hip, knee = (self.mp_pose.PoseLandmark.RIGHT_SHOULDER, self.mp_pose.PoseLandmark.RIGHT_HIP, self.mp_pose.PoseLandmark.RIGHT_KNEE); chosen_hip = hip
                         if lm[chosen_hip.value].visibility > self.VISIBILITY_THRESHOLD: angle = calculate_angle([lm[shoulder.value].x, lm[shoulder.value].y, lm[shoulder.value].z],[lm[hip.value].x, lm[hip.value].y, lm[hip.value].z],[lm[knee.value].x, lm[knee.value].y, lm[knee.value].z])
-                    elif exercise_name_for_logic in ['barbell biceps curl', 'hammer curl', 'push-up']:
+                    
+                    elif exercise_name_for_logic in ['hammer curl', 'push-up']: # <-- Removed 'barbell biceps curl'
                         shoulder, elbow, wrist = (self.mp_pose.PoseLandmark.LEFT_SHOULDER, self.mp_pose.PoseLandmark.LEFT_ELBOW, self.mp_pose.PoseLandmark.LEFT_WRIST); left_vis = lm[elbow.value].visibility; right_vis = lm[self.mp_pose.PoseLandmark.RIGHT_ELBOW.value].visibility; chosen_elbow = elbow
                         if right_vis > left_vis and right_vis > self.VISIBILITY_THRESHOLD: shoulder, elbow, wrist = (self.mp_pose.PoseLandmark.RIGHT_SHOULDER, self.mp_pose.PoseLandmark.RIGHT_ELBOW, self.mp_pose.PoseLandmark.RIGHT_WRIST); chosen_elbow = elbow
                         elbow_visibility = lm[chosen_elbow.value].visibility
                         if elbow_visibility > self.VISIBILITY_THRESHOLD: angle = calculate_angle([lm[shoulder.value].x, lm[shoulder.value].y, lm[shoulder.value].z],[lm[elbow.value].x, lm[elbow.value].y, lm[elbow.value].z],[lm[wrist.value].x, lm[wrist.value].y, lm[wrist.value].z])
+                    
                     elif exercise_name_for_logic == 'lateral raise':
                         hip, shoulder, elbow = (self.mp_pose.PoseLandmark.LEFT_HIP, self.mp_pose.PoseLandmark.LEFT_SHOULDER, self.mp_pose.PoseLandmark.LEFT_ELBOW); left_vis = lm[shoulder.value].visibility; right_vis = lm[self.mp_pose.PoseLandmark.RIGHT_SHOULDER.value].visibility; chosen_shoulder = shoulder
                         if right_vis > left_vis and right_vis > self.VISIBILITY_THRESHOLD: hip, shoulder, elbow = (self.mp_pose.PoseLandmark.RIGHT_HIP, self.mp_pose.PoseLandmark.RIGHT_SHOULDER, self.mp_pose.PoseLandmark.RIGHT_ELBOW); chosen_shoulder = shoulder
