@@ -65,7 +65,7 @@ st_frame = st.empty()
 
 if st.session_state.run_game and st.session_state.game_engine is not None:
     # --- Main Game Loop ---
-    cap = cv2.VideoCapture("/home/smayan/Downloads/Exercises/Testing Videos/plank.mp4")
+    cap = cv2.VideoCapture(0)
     
     if not cap.isOpened():
         st.error("Could not open webcam. Please check permissions.")

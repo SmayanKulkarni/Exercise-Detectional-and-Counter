@@ -34,8 +34,8 @@ class RepCounter:
         self.form_error = None
         self.exercise_name = exercise_name
         self.weight = weight
-        self.base_points = 100
-        self.penalty_points = -25
+        self.base_points = 10
+        self.penalty_points = -5
 
     def update(self, angle):
         rep_status = None; points = 0
@@ -68,8 +68,8 @@ class RepCounterInverted:
         self.form_error = None
         self.exercise_name = exercise_name
         self.weight = weight
-        self.base_points = 100
-        self.penalty_points = -25
+        self.base_points = 10
+        self.penalty_points = -5
 
     def update(self, angle):
         rep_status = None; points = 0
