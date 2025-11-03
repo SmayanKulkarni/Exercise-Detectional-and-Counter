@@ -9,6 +9,7 @@ from collections import deque
 import csv 
 import os 
 from datetime import datetime
+import pandas as pd
 
 # --- Helper: Calculate Angle ---
 # (Unchanged)
@@ -23,7 +24,7 @@ def calculate_angle(a, b, c):
     return angle
 
 # --- Rep Counter Classes (RepCounter & RepCounterInverted) ---
-# (Unchanged)
+# (Unchanged - using your 10/-5 logic)
 class RepCounter:
     def __init__(self, down_threshold, up_threshold, exercise_name="exercise", weight=0, **kwargs):
         self.count = 0
@@ -34,8 +35,8 @@ class RepCounter:
         self.form_error = None
         self.exercise_name = exercise_name
         self.weight = weight
-        self.base_points = 100
-        self.penalty_points = -25
+        self.base_points = 10
+        self.penalty_points = -5
 
     def update(self, angle):
         rep_status = None; points = 0
@@ -68,8 +69,8 @@ class RepCounterInverted:
         self.form_error = None
         self.exercise_name = exercise_name
         self.weight = weight
-        self.base_points = 100
-        self.penalty_points = -25
+        self.base_points = 10
+        self.penalty_points = -5
 
     def update(self, angle):
         rep_status = None; points = 0
@@ -108,31 +109,52 @@ def check_form(exercise, landmarks, rep_counter):
             hip = [landmarks[mp.solutions.pose.PoseLandmark.LEFT_HIP.value].x, landmarks[mp.solutions.pose.PoseLandmark.LEFT_HIP.value].y, landmarks[mp.solutions.pose.PoseLandmark.LEFT_HIP.value].z]
             ankle = [landmarks[mp.solutions.pose.PoseLandmark.LEFT_ANKLE.value].x, landmarks[mp.solutions.pose.PoseLandmark.LEFT_ANKLE.value].y, landmarks[mp.solutions.pose.PoseLandmark.LEFT_ANKLE.value].z]
             body_angle = calculate_angle(shoulder, hip, ankle)
-            if body_angle < 155: return "Hips sagging"
+            if body_angle < 130: return "Hips sagging"
             if body_angle > 175: return "Hips too high"
     except Exception as e: pass
     return None
 
 # --- Score Saving ---
-# (Unchanged)
+# (Unchanged - using the correct pandas version)
 SCORE_FILE = "scores.csv"
 def save_score(name, final_score):
-    file_exists = os.path.isfile(SCORE_FILE)
+    headers = ['Name', 'Score', 'Timestamp']
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    name_standardized = name.strip().lower()
     try:
-        with open(SCORE_FILE, 'a', newline='') as f:
-            writer = csv.writer(f)
-            if not file_exists:
-                writer.writerow(['Name', 'Score', 'Timestamp'])
-            timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            writer.writerow([name, final_score, timestamp])
-    except IOError as e:
-        print(f"Error saving score: {e}")
+        if os.path.isfile(SCORE_FILE):
+            try:
+                df = pd.read_csv(SCORE_FILE)
+                if df.empty and not list(df.columns) == headers:
+                    df = pd.DataFrame(columns=headers)
+            except pd.errors.EmptyDataError:
+                df = pd.DataFrame(columns=headers)
+        else:
+            df = pd.DataFrame(columns=headers)
+        
+        df['Name_std'] = df['Name'].astype(str).str.strip().str.lower()
+        if name_standardized in df['Name_std'].values:
+            player_index = df[df['Name_std'] == name_standardized].index[0]
+            current_score = pd.to_numeric(df.loc[player_index, 'Score'], errors='coerce').fillna(0)
+            new_score = current_score + final_score
+            df.loc[player_index, 'Score'] = new_score
+            df.loc[player_index, 'Timestamp'] = timestamp
+            print(f"Updated score for {df.loc[player_index, 'Name']}. New total: {new_score}")
+        else:
+            new_row = pd.DataFrame([{'Name': name, 'Score': final_score, 'Timestamp': timestamp}])
+            df = pd.concat([df, new_row], ignore_index=True)
+            print(f"Added new player {name} with score: {final_score}")
+        if 'Name_std' in df.columns:
+            df = df.drop(columns=['Name_std'])
+        df.to_csv(SCORE_FILE, index=False)
+    except Exception as e:
+        print(f"Error saving or updating score: {e}")
+# --- End of save_score function ---
 
 
 # --- Main Game Engine Class ---
 class GameEngine:
     def __init__(self, player_name, weight=0):
-        # (Initialization - unchanged)
         print("Initializing GameEngine...")
         self.player_name = player_name
         self.weight = weight
@@ -165,12 +187,10 @@ class GameEngine:
         self.score = 0
         self.form_feedback = ""
         self.feedback_display_time = 0
-        
-        # --- UPDATED: Removed barbell biceps curl ---
         self.rep_counter_config = {
             'squat': {'class': RepCounter, 'params': {'down_threshold': 90, 'up_threshold': 160, 'exercise_name': 'squat'}, 'is_weighted': True},
             'push-up': {'class': RepCounter, 'params': {'down_threshold': 110, 'up_threshold': 160, 'exercise_name': 'push-up'}, 'is_weighted': False},
-            # 'barbell biceps curl': {'class': RepCounter, 'params': {'down_threshold': 60, 'up_threshold': 150, 'exercise_name': 'bicep curl'}, 'is_weighted': True}, # <-- REMOVED
+            'barbell biceps curl': {'class': RepCounter, 'params': {'down_threshold': 60, 'up_threshold': 150, 'exercise_name': 'bicep curl'}, 'is_weighted': True},
             'hammer curl': {'class': RepCounter, 'params': {'down_threshold': 100, 'up_threshold': 140, 'exercise_name': 'hammer curl'}, 'is_weighted': True},
             'lateral raise': {'class': RepCounterInverted, 'params': {'down_threshold': 30, 'up_threshold': 80, 'exercise_name': 'lateral raise'}, 'is_weighted': True},
         }
@@ -180,7 +200,32 @@ class GameEngine:
         self.last_plank_point_time = None
         self.grace_period_active_for = None
         self.grace_period_end_time = 0
+        
+        self.pause_start_time = None # NEW: For pause logic
+        
         print("GameEngine Initialized.")
+
+    # --- NEW: Pause/Resume Methods ---
+    def pause(self):
+        if self.pause_start_time is None: # Only pause if not already paused
+            self.pause_start_time = time.time()
+            print("GameEngine Paused")
+
+    def unpause(self):
+        if self.pause_start_time is not None: # Only unpause if paused
+            pause_duration = time.time() - self.pause_start_time
+            print(f"GameEngine Resumed after {pause_duration:.2f}s")
+            
+            # Add pause duration to all time-sensitive variables
+            if self.last_prediction_time: self.last_prediction_time += pause_duration
+            if self.plank_timer_start: self.plank_timer_start += pause_duration
+            if self.plank_grace_period_start: self.plank_grace_period_start += pause_duration
+            if self.last_plank_point_time: self.last_plank_point_time += pause_duration
+            if self.grace_period_end_time > 0: self.grace_period_end_time += pause_duration
+            if self.feedback_display_time > 0: self.feedback_display_time += pause_duration
+            
+            self.pause_start_time = None # Reset pause time
+    # --- End Pause/Resume ---
 
     def process_frame(self, frame):
         # (Grace period check - unchanged)
@@ -259,7 +304,7 @@ class GameEngine:
                     plank_time_elapsed = current_time - self.plank_timer_start
                     reps_text = f"{plank_time_elapsed:.1f}s"
                     if current_time - (self.last_plank_point_time or self.plank_timer_start) >= 1.0:
-                        self.score += 10 if plank_form_ok else 5
+                        self.score += 2 if plank_form_ok else 1
                         self.last_plank_point_time = current_time
 
         elif exercise_to_process in self.rep_counter_config and self.current_rep_counter:
@@ -268,18 +313,15 @@ class GameEngine:
             if results.pose_landmarks:
                 lm = results.pose_landmarks.landmark; angle = 0; points_this_update = 0
                 try:
-                    # --- UPDATED: Removed 'barbell biceps curl' from logic ---
                     if exercise_name_for_logic == 'squat':
                         shoulder, hip, knee = (self.mp_pose.PoseLandmark.LEFT_SHOULDER, self.mp_pose.PoseLandmark.LEFT_HIP, self.mp_pose.PoseLandmark.LEFT_KNEE); left_vis = lm[hip.value].visibility; right_vis = lm[self.mp_pose.PoseLandmark.RIGHT_HIP.value].visibility; chosen_hip = hip
                         if right_vis > left_vis and right_vis > self.VISIBILITY_THRESHOLD: shoulder, hip, knee = (self.mp_pose.PoseLandmark.RIGHT_SHOULDER, self.mp_pose.PoseLandmark.RIGHT_HIP, self.mp_pose.PoseLandmark.RIGHT_KNEE); chosen_hip = hip
                         if lm[chosen_hip.value].visibility > self.VISIBILITY_THRESHOLD: angle = calculate_angle([lm[shoulder.value].x, lm[shoulder.value].y, lm[shoulder.value].z],[lm[hip.value].x, lm[hip.value].y, lm[hip.value].z],[lm[knee.value].x, lm[knee.value].y, lm[knee.value].z])
-                    
-                    elif exercise_name_for_logic in ['hammer curl', 'push-up']: # <-- Removed 'barbell biceps curl'
+                    elif exercise_name_for_logic in ['barbell biceps curl', 'hammer curl', 'push-up']:
                         shoulder, elbow, wrist = (self.mp_pose.PoseLandmark.LEFT_SHOULDER, self.mp_pose.PoseLandmark.LEFT_ELBOW, self.mp_pose.PoseLandmark.LEFT_WRIST); left_vis = lm[elbow.value].visibility; right_vis = lm[self.mp_pose.PoseLandmark.RIGHT_ELBOW.value].visibility; chosen_elbow = elbow
                         if right_vis > left_vis and right_vis > self.VISIBILITY_THRESHOLD: shoulder, elbow, wrist = (self.mp_pose.PoseLandmark.RIGHT_SHOULDER, self.mp_pose.PoseLandmark.RIGHT_ELBOW, self.mp_pose.PoseLandmark.RIGHT_WRIST); chosen_elbow = elbow
                         elbow_visibility = lm[chosen_elbow.value].visibility
                         if elbow_visibility > self.VISIBILITY_THRESHOLD: angle = calculate_angle([lm[shoulder.value].x, lm[shoulder.value].y, lm[shoulder.value].z],[lm[elbow.value].x, lm[elbow.value].y, lm[elbow.value].z],[lm[wrist.value].x, lm[wrist.value].y, lm[wrist.value].z])
-                    
                     elif exercise_name_for_logic == 'lateral raise':
                         hip, shoulder, elbow = (self.mp_pose.PoseLandmark.LEFT_HIP, self.mp_pose.PoseLandmark.LEFT_SHOULDER, self.mp_pose.PoseLandmark.LEFT_ELBOW); left_vis = lm[shoulder.value].visibility; right_vis = lm[self.mp_pose.PoseLandmark.RIGHT_SHOULDER.value].visibility; chosen_shoulder = shoulder
                         if right_vis > left_vis and right_vis > self.VISIBILITY_THRESHOLD: hip, shoulder, elbow = (self.mp_pose.PoseLandmark.RIGHT_HIP, self.mp_pose.PoseLandmark.RIGHT_SHOULDER, self.mp_pose.PoseLandmark.RIGHT_ELBOW); chosen_shoulder = shoulder
@@ -310,7 +352,7 @@ class GameEngine:
     
     def save_final_score(self):
         print(f"Saving final score for {self.player_name}: {self.score}")
-        save_score(self.player_name, self.score)
+        save_score(self.player_name, self.score) # Uses the new pandas function
 
     def close(self):
         self.pose.close()
