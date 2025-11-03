@@ -263,9 +263,9 @@ class GameEngine:
                     # Check if a second has passed to award points
                     if current_time - (self.last_plank_point_time or self.plank_timer_start) >= 1.0:
                         if plank_form_ok:
-                            self.score += 10 # Add 10 points for good form
+                            self.score += 4 # Add 4 points for good form
                         else:
-                            self.score += 5  # Add 5 points for bad form
+                            self.score += 1 # Add 1 points for bad form
                         self.last_plank_point_time = current_time
             # --- End of Updated Plank Logic ---
 
