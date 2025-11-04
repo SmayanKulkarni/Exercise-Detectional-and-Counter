@@ -63,7 +63,7 @@ with col1_setup:
 with col2_setup:
     weight_input = st.number_input(
         "Dumbbell Weight (per hand, in kg)", 
-        min_value=0, max_value=50, value=0, step=1, 
+        min_value=0.0, max_value=50.0, value=0.0, step=0.1, 
         disabled=is_disabled
     )
 
