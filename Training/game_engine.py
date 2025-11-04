@@ -24,7 +24,7 @@ def calculate_angle(a, b, c):
     return angle
 
 # --- Rep Counter Classes (RepCounter & RepCounterInverted) ---
-# (Unchanged - using your 10/-5 logic)
+# (Unchanged)
 class RepCounter:
     def __init__(self, down_threshold, up_threshold, exercise_name="exercise", weight=0, **kwargs):
         self.count = 0
@@ -109,13 +109,13 @@ def check_form(exercise, landmarks, rep_counter):
             hip = [landmarks[mp.solutions.pose.PoseLandmark.LEFT_HIP.value].x, landmarks[mp.solutions.pose.PoseLandmark.LEFT_HIP.value].y, landmarks[mp.solutions.pose.PoseLandmark.LEFT_HIP.value].z]
             ankle = [landmarks[mp.solutions.pose.PoseLandmark.LEFT_ANKLE.value].x, landmarks[mp.solutions.pose.PoseLandmark.LEFT_ANKLE.value].y, landmarks[mp.solutions.pose.PoseLandmark.LEFT_ANKLE.value].z]
             body_angle = calculate_angle(shoulder, hip, ankle)
-            if body_angle < 130: return "Hips sagging"
+            if body_angle < 140: return "Hips sagging"
             if body_angle > 175: return "Hips too high"
     except Exception as e: pass
     return None
 
 # --- Score Saving ---
-# (Unchanged - using the correct pandas version)
+# (Unchanged)
 SCORE_FILE = "scores.csv"
 def save_score(name, final_score):
     headers = ['Name', 'Score', 'Timestamp']
@@ -201,11 +201,13 @@ class GameEngine:
         self.grace_period_active_for = None
         self.grace_period_end_time = 0
         
-        self.pause_start_time = None # NEW: For pause logic
+        self.plank_90s_bonus_awarded = False # <<< --- CHANGED ---
+        
+        self.pause_start_time = None # For pause logic
         
         print("GameEngine Initialized.")
 
-    # --- NEW: Pause/Resume Methods ---
+    # --- Pause/Resume Methods ---
     def pause(self):
         if self.pause_start_time is None: # Only pause if not already paused
             self.pause_start_time = time.time()
@@ -228,12 +230,12 @@ class GameEngine:
     # --- End Pause/Resume ---
 
     def process_frame(self, frame):
-        # (Grace period check - unchanged)
+        # (Grace period check)
         if self.grace_period_active_for is not None and time.time() > self.grace_period_end_time:
             self.current_rep_counter = None
             self.grace_period_active_for = None
         
-        # (Pose estimation & normalization - unchanged)
+        # (Pose estimation & normalization)
         image_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         results = self.pose.process(image_rgb)
         current_landmarks_flat = np.zeros(self.NUM_FEATURES)
@@ -244,7 +246,7 @@ class GameEngine:
             elif shoulder_visibility_ok: center_point = (frame_landmarks_np[self.mp_pose.PoseLandmark.LEFT_SHOULDER.value] + frame_landmarks_np[self.mp_pose.PoseLandmark.RIGHT_SHOULDER.value]) / 2.0; normalized_landmarks = frame_landmarks_np - center_point; current_landmarks_flat = normalized_landmarks[11:].flatten()
         self.landmark_sequence.append(current_landmarks_flat)
         
-        # (Classification & Stability Logic - unchanged)
+        # (Classification & Stability Logic)
         if (time.time() - self.last_prediction_time > self.PREDICTION_INTERVAL) and len(self.landmark_sequence) == self.SEQ_LENGTH:
             self.last_prediction_time = time.time()
             landmark_list = list(self.landmark_sequence); padded_sequence = pad_sequences([landmark_list], maxlen=self.SEQ_LENGTH, dtype='float32', padding='pre')
@@ -280,7 +282,6 @@ class GameEngine:
                 except ValueError: pass
         
         # --- Exercise-Specific Logic ---
-        # (Unchanged)
         display_text = f"{self.stable_prediction}"
         exercise_to_process = self.grace_period_active_for if self.grace_period_active_for is not None else self.stable_prediction
         reps_text = "N/A"; current_feedback = ""
@@ -295,6 +296,7 @@ class GameEngine:
                     grace_time_elapsed = time.time() - self.plank_grace_period_start
                     if grace_time_elapsed >= 5.0:
                         self.plank_timer_start = time.time(); self.last_plank_point_time = time.time(); plank_time_elapsed = 0.0
+                        self.plank_90s_bonus_awarded = False # <<< --- CHANGED: Reset bonus flag ---
                         reps_text = f"{plank_time_elapsed:.1f}s"
                     else:
                         countdown = 5.0 - grace_time_elapsed
@@ -303,9 +305,18 @@ class GameEngine:
                     current_time = time.time()
                     plank_time_elapsed = current_time - self.plank_timer_start
                     reps_text = f"{plank_time_elapsed:.1f}s"
+                    
+                    # <<< --- CHANGED: Add 90s bonus logic ---
+                    if plank_time_elapsed >= 90.0 and not self.plank_90s_bonus_awarded:
+                        self.score += 30
+                        self.plank_90s_bonus_awarded = True
+                        current_feedback = "+30 Bonus!" 
+                        print("Awarded 90-second plank bonus!")
+                    # <<< --- END CHANGE ---
+                    
                     if current_time - (self.last_plank_point_time or self.plank_timer_start) >= 1.0:
                         self.score += 2 if plank_form_ok else 1
-                        self.last_plank_point_time = current_time
+                        self.last_plank_point_time = current_time 
 
         elif exercise_to_process in self.rep_counter_config and self.current_rep_counter:
             exercise_name_for_logic = exercise_to_process
@@ -323,7 +334,7 @@ class GameEngine:
                         elbow_visibility = lm[chosen_elbow.value].visibility
                         if elbow_visibility > self.VISIBILITY_THRESHOLD: angle = calculate_angle([lm[shoulder.value].x, lm[shoulder.value].y, lm[shoulder.value].z],[lm[elbow.value].x, lm[elbow.value].y, lm[elbow.value].z],[lm[wrist.value].x, lm[wrist.value].y, lm[wrist.value].z])
                     elif exercise_name_for_logic == 'lateral raise':
-                        hip, shoulder, elbow = (self.mp_pose.PoseLandmark.LEFT_HIP, self.mp_pose.PoseLandmark.LEFT_SHOULDER, self.mp_pose.PoseLandmark.LEFT_ELBOW); left_vis = lm[shoulder.value].visibility; right_vis = lm[self.mp_pose.PoseLandmark.RIGHT_SHOULDER.value].visibility; chosen_shoulder = shoulder
+                        hip, shoulder, elbow = (self.mp_pose.PoseLandmark.LEFT_HIP, self.mp_pose.PoseLandmask.LEFT_SHOULDER, self.mp_pose.PoseLandmark.LEFT_ELBOW); left_vis = lm[shoulder.value].visibility; right_vis = lm[self.mp_pose.PoseLandmark.RIGHT_SHOULDER.value].visibility; chosen_shoulder = shoulder
                         if right_vis > left_vis and right_vis > self.VISIBILITY_THRESHOLD: hip, shoulder, elbow = (self.mp_pose.PoseLandmark.RIGHT_HIP, self.mp_pose.PoseLandmark.RIGHT_SHOULDER, self.mp_pose.PoseLandmark.RIGHT_ELBOW); chosen_shoulder = shoulder
                         if lm[chosen_shoulder.value].visibility > self.VISIBILITY_THRESHOLD: angle = calculate_angle([lm[hip.value].x, lm[hip.value].y, lm[hip.value].z],[lm[shoulder.value].x, lm[shoulder.value].y, lm[shoulder.value].z],[lm[elbow.value].x, lm[elbow.value].y, lm[elbow.value].z])
                     
@@ -345,7 +356,7 @@ class GameEngine:
         cv2.putText(frame, f"Reps: {reps_text}", (10, 100), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 0, 0), 2, cv2.LINE_AA)
         if current_feedback: self.form_feedback = current_feedback; self.feedback_display_time = time.time()
         if self.form_feedback and (time.time() - self.feedback_display_time < 2.0):
-             cv2.putText(frame, self.form_feedback, (10, 150), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2, cv2.LINE_AA)
+            cv2.putText(frame, self.form_feedback, (10, 150), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2, cv2.LINE_AA)
         else: self.form_feedback = ""
         
         return frame, self.stable_prediction, reps_text, self.score, self.form_feedback
