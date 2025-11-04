@@ -334,7 +334,7 @@ class GameEngine:
                         elbow_visibility = lm[chosen_elbow.value].visibility
                         if elbow_visibility > self.VISIBILITY_THRESHOLD: angle = calculate_angle([lm[shoulder.value].x, lm[shoulder.value].y, lm[shoulder.value].z],[lm[elbow.value].x, lm[elbow.value].y, lm[elbow.value].z],[lm[wrist.value].x, lm[wrist.value].y, lm[wrist.value].z])
                     elif exercise_name_for_logic == 'lateral raise':
-                        hip, shoulder, elbow = (self.mp_pose.PoseLandmark.LEFT_HIP, self.mp_pose.PoseLandmask.LEFT_SHOULDER, self.mp_pose.PoseLandmark.LEFT_ELBOW); left_vis = lm[shoulder.value].visibility; right_vis = lm[self.mp_pose.PoseLandmark.RIGHT_SHOULDER.value].visibility; chosen_shoulder = shoulder
+                        hip, shoulder, elbow = (self.mp_pose.PoseLandmark.LEFT_HIP, self.mp_pose.PoseLandmark.LEFT_SHOULDER, self.mp_pose.PoseLandmark.LEFT_ELBOW); left_vis = lm[shoulder.value].visibility; right_vis = lm[self.mp_pose.PoseLandmark.RIGHT_SHOULDER.value].visibility; chosen_shoulder = shoulder
                         if right_vis > left_vis and right_vis > self.VISIBILITY_THRESHOLD: hip, shoulder, elbow = (self.mp_pose.PoseLandmark.RIGHT_HIP, self.mp_pose.PoseLandmark.RIGHT_SHOULDER, self.mp_pose.PoseLandmark.RIGHT_ELBOW); chosen_shoulder = shoulder
                         if lm[chosen_shoulder.value].visibility > self.VISIBILITY_THRESHOLD: angle = calculate_angle([lm[hip.value].x, lm[hip.value].y, lm[hip.value].z],[lm[shoulder.value].x, lm[shoulder.value].y, lm[shoulder.value].z],[lm[elbow.value].x, lm[elbow.value].y, lm[elbow.value].z])
                     
