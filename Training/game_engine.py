@@ -48,7 +48,7 @@ class RepCounter:
             if angle > self.up_threshold:
                 was_deep_enough = self.min_angle_in_rep < self.down_threshold
                 if was_deep_enough and self.form_error is None:
-                    self.count += 1; points = self.base_points + int(self.weight * 5); rep_status = "rep_counted"
+                    self.count += 1; points = self.base_points + int(self.weight * 2); rep_status = "rep_counted"
                 else:
                     points = self.penalty_points
                     if not was_deep_enough: rep_status = "partial_rep"
@@ -82,7 +82,7 @@ class RepCounterInverted:
             if angle < self.down_threshold:
                 was_high_enough = self.max_angle_in_rep > self.up_threshold
                 if was_high_enough and self.form_error is None:
-                    self.count += 1; points = self.base_points + int(self.weight * 5); rep_status = "rep_counted"
+                    self.count += 1; points = self.base_points + int(self.weight * 2); rep_status = "rep_counted"
                 else:
                     points = self.penalty_points
                     if not was_high_enough: rep_status = "partial_rep"
