@@ -75,10 +75,10 @@ exercise_images = {
 
 # --- Point system descriptions (to match your game_engine.py) ---
 point_descriptions = {
-    "Squat": "+10 points (+ weight bonus) per deep rep. Shallow reps or bad form: -5 points.",
-    "Push-up": "+10 points per deep rep (no weight bonus). Shallow reps: -5 points.",
-    "Hammer Curl": "+10 points (+ weight bonus) per correct rep. Partial reps: -5 points.",
-    "Lateral Raise": "+10 points (+ weight bonus) per high rep. Partial reps: -5 points.",
+    "Squat": "+5 points (+ weight bonus) per deep rep. Shallow reps or bad form: -3 points.",
+    "Push-up": "+5 points per deep rep (no weight bonus). Shallow reps: -3 points.",
+    "Hammer Curl": "+5 points (+ weight bonus) per correct rep. Partial reps: -3 points.",
+    "Lateral Raise": "+5 points (+ weight bonus) per high rep. Partial reps: -3 points.",
     "Plank": "+2 points/sec for good form. +1 point/sec if hips sag or pike."
 }
 
