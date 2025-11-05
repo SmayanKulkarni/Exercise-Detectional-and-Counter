@@ -139,4 +139,4 @@ for exercise in exercise_folders:
 
 pose.close()
 print(f"\n--- Preprocessing Complete ---")
-print(f"Total .npy samples created: {total_samples_created}")
+print(f"Total .npy samples created: {total_samples_created}") 
